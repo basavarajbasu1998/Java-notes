@@ -1,4 +1,4 @@
-# Java 8 — Lambda & Stream API Interview Q&A (5–6 Years Experience)
+# Java 8 — Lambda & Stream API 
 
 ---
 
