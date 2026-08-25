@@ -1,5 +1,4 @@
-# Java Collections — Interview Q&A (5–6 Years Experience)
-
+# Java Collections 
 ---
 
 ## 1. ArrayList vs LinkedList
