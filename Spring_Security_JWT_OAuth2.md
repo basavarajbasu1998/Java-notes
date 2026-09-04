@@ -1,4 +1,4 @@
-# Spring Security Interview Questions & Answers — 5 Years Experience
+# Spring Security 
 
 ## 1. What is Spring Security?
 
