@@ -62,6 +62,25 @@ It's a direct memory offset calculation (`base_address + index * element_size`) 
 - Default initial capacity: **16**, default load factor: **0.75**.
 - Table size is always a **power of 2** so that `(n-1) & hash` behaves like a fast modulo.
 
+## HashMap `put(key, value)` Internal Flow
+
+```text
+map.put(key, value)
+       ↓
+calculate hash
+       ↓
+calculate bucket index
+       ↓
+bucket empty?
+   ↓ Yes        ↓ No
+insert Node    compare keys
+                  ↓
+             same key?
+             ↓ Yes → update value
+             ↓ No
+          collision
+             ↓
+      linked list / tree 
 ---
 
 ## 6. What is a hash collision?
