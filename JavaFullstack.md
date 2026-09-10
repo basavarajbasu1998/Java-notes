@@ -33,27 +33,6 @@
 10. HashMap uses both `hashCode()` and `equals()` to locate and compare keys.
 11. Average time complexity for `put()` and `get()` is O(1).
 
-## HashMap `put(key, value)` Internal Flow
-
-```text
-map.put(key, value)
-       ↓
-calculate hash
-       ↓
-calculate bucket index
-       ↓
-bucket empty?
-   ↓ Yes        ↓ No
-insert Node    compare keys
-                  ↓
-             same key?
-             ↓ Yes → update value
-             ↓ No
-          collision
-             ↓
-      linked list / tree 
-
-
 ### ConcurrentHashMap
 
 1. Thread-safe implementation of `Map`.
