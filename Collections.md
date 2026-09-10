@@ -64,7 +64,7 @@ It's a direct memory offset calculation (`base_address + index * element_size`) 
 
 ## HashMap `put(key, value)` Internal Flow
 
-```text
+text
 map.put(key, value)
        ↓
 calculate hash
@@ -81,7 +81,7 @@ insert Node    compare keys
           collision
              ↓
       linked list / tree 
----
+
 
 ## 6. What is a hash collision?
 
