@@ -502,7 +502,10 @@ Example:
 prefetch = 10
 ```
 
-The consumer can receive up to approximately 10 unacknowledged messages depending on the configured acknowledgement model and RabbitMQ behavior.
+The broker delivers at most 10 unacknowledged messages to a consumer at a time (per consumer by default in Spring AMQP). Prefetch has no effect in auto-ack (no-ack) mode.
+
+> Note: RabbitMQ Streams (3.9+) provide a retained, replayable log similar to Kafka, so "RabbitMQ can't replay" applies to classic/quorum queues only.
+> Spring AMQP trap: with AUTO ack, an exception causes a requeue by default (`defaultRequeueRejected=true`), which creates an infinite redelivery loop for poison messages. Throw `AmqpRejectAndDontRequeueException` or configure a DLX/retry limit.
 
 ### Why use it?
 

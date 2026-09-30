@@ -29,9 +29,10 @@
 6. Buckets are maintained in an array.
 7. If multiple keys map to the same bucket, it is called a collision.
 8. Before Java 8, collisions were handled using a LinkedList.
-9. From Java 8 onward, if bucket size exceeds 8, the LinkedList is converted to a Red-Black Tree for better performance.
+9. From Java 8 onward, when a bucket's chain reaches 8 nodes **and** the table capacity is at least 64, the LinkedList is converted to a Red-Black Tree (if capacity is below 64, the table resizes instead). It converts back to a list at 6 nodes.
 10. HashMap uses both `hashCode()` and `equals()` to locate and compare keys.
-11. Average time complexity for `put()` and `get()` is O(1).
+11. Average time complexity for `put()` and `get()` is O(1); worst case O(log n) in Java 8+ (O(n) before, when chains were plain lists).
+12. Bucket index = `(n - 1) & hash`, where `hash = h ^ (h >>> 16)` and `h = key.hashCode()`. Default capacity 16, load factor 0.75, capacity is always a power of 2.
 
 ### ConcurrentHashMap
 
@@ -114,7 +115,7 @@
 1. Based on a doubly linked list.
 2. Maintains insertion order.
 3. Allows duplicate elements.
-4. Fast for insertion and deletion.
+4. Fast insertion/deletion **once you hold the node/iterator** (O(1)), but finding the position is O(n); in practice `ArrayList` is usually faster.
 5. Slow for searching and random access because it traverses nodes.
 6. Each node stores data, a previous node reference, and a next node reference.
 
@@ -169,10 +170,10 @@
 |---|---|---|
 | Meaning | Detects modification during iteration and throws exception | Allows modification during iteration without exception |
 | Exception | Throws `ConcurrentModificationException` | No `ConcurrentModificationException` |
-| Works on | Original collection | Copy of collection / separate structure |
+| Works on | Original collection | Snapshot copy (`CopyOnWriteArrayList`) or weakly consistent view (`ConcurrentHashMap`) |
 | Memory | No extra memory | Requires extra memory |
 | Performance | Faster | Slower compared to fail-fast |
-| Thread Safe | ❌ Not thread-safe | ✅ Generally safer for concurrent access |
+| Thread Safe | Not a thread-safety guarantee: detection is best-effort via `modCount` | ✅ Designed for concurrent access |
 
 ---
 
@@ -230,7 +231,7 @@
 | Example: `"Hello"` | The location where `"Hello"` is stored. |
 | Created using string literals. | Managed by the JVM. |
 | Represents the actual string literal. | Represents the collection/storage of literals. |
-| Written in source code. | Exists in Heap memory (String Constant Pool area). |
+| Written in source code. | Exists in Heap memory since Java 7 (it was in PermGen before). `new String("a")` creates a separate heap object outside the pool; `intern()` returns the pooled copy. |
 | Duplicate constants are avoided. | Maintains only one copy of identical literals. |
 | Compiler identifies constants. | JVM manages storage and reuse. |
 | Used to improve readability. | Used to improve memory efficiency. |
@@ -257,8 +258,8 @@ Topics covered: Stack memory, Heap memory, Method area, String pool, Garbage Col
 - Size depends on the class structure.
 - The Garbage Collector manages this area by removing unused objects.
 - Used for dynamic memory allocation.
-- Programmer allocates memory at runtime.
-- Memory remains allocated until it is freed.
+- Memory is allocated when an object is created with `new`.
+- Memory is reclaimed automatically by the GC once the object is unreachable (there is no manual free in Java).
 
 ---
 
@@ -294,10 +295,10 @@ An object becomes eligible for garbage collection when it's no longer reachable 
 ### Types of Garbage Collectors in Java
 
 - **Serial GC** — single-threaded, stops all application threads during collection ("stop-the-world"). Best for small applications with small heaps.
-- **Parallel GC (Throughput Collector)** — uses multiple threads for young generation collection; default GC in Java 8. Focuses on maximizing throughput.
+- **Parallel GC (Throughput Collector)** — uses multiple threads for both young and old generation collections; default GC in Java 8. Focuses on maximizing throughput.
 - **CMS (Concurrent Mark Sweep)** — performs most of its work concurrently with application threads to minimize pause times. Deprecated in Java 9, removed in Java 14.
 - **G1 GC (Garbage First)** — divides the heap into regions instead of fixed young/old generation spaces; balances throughput and low pause times. Default GC starting Java 9.
-- **ZGC / Shenandoah** — newer low-latency collectors (Java 11+) for very large heaps with sub-millisecond pause times; typically asked about only in senior/advanced interviews.
+- **ZGC / Shenandoah** — newer low-latency collectors (ZGC: experimental in 11, production in 15, generational in 21; Shenandoah: production in 15) for very large heaps with pauses typically well under 10 ms; typically asked about only in senior/advanced interviews.
 
 ### GC Algorithms/Phases
 
@@ -309,7 +310,7 @@ An object becomes eligible for garbage collection when it's no longer reachable 
 
 - **Minor GC** — cleans the Young Generation only; relatively fast and frequent.
 - **Major GC** — cleans the Old Generation.
-- **Full GC** — cleans the entire heap (Young + Old + Metaspace); more expensive, causes longer pause times, and is a common performance-tuning target.
+- **Full GC** — cleans the Young + Old generations (and unloads classes from Metaspace); more expensive, causes longer pause times, and is a common performance-tuning target.
 
 ### Object Promotion
 
@@ -323,8 +324,8 @@ Objects that survive multiple Minor GC cycles in the Young Generation (based on 
   - **Strong reference** — normal reference; prevents GC as long as it exists.
   - **Soft reference** — collected only when the JVM is low on memory (used for caches).
   - **Weak reference** — collected in the next GC cycle regardless of memory pressure (used in `WeakHashMap`).
-  - **Phantom reference** — object already finalized; used for cleanup actions after an object is removed from memory, queued via `ReferenceQueue`.
-- **How to tune GC** — common JVM flags: `-Xms`, `-Xmx` (initial/max heap size), `-XX:+UseG1GC`, `-XX:+PrintGCDetails` (for logging).
+  - **Phantom reference** — `get()` always returns null; the reference is enqueued in a `ReferenceQueue` after the object is finalized and phantom-reachable, before its memory is reclaimed. Used for cleanup actions (see `Cleaner`).
+- **How to tune GC** — common JVM flags: `-Xms`, `-Xmx` (initial/max heap size), `-XX:+UseG1GC`, `-Xlog:gc*` (GC logging on Java 9+; `-XX:+PrintGCDetails` was the Java 8 flag).
 
 ---
 
@@ -567,6 +568,10 @@ Intermediate operations transform a stream into another stream:
 - **`sorted()`** — sorts the elements of a stream.
 - **`distinct()`** — removes duplicates.
 - **`skip()`** — skips the first *n* elements.
+- **`limit()`**, **`peek()`**, **`flatMap()`** — also intermediate.
+
+**Terminal operations** (they trigger the pipeline and end the stream):
+
 - **`forEach()`** — iterates over all elements in a stream.
 - **`collect(Collectors.toList())`** — collects stream elements into a list (or other collections like set/map).
 - **`reduce()`** — reduces stream elements into a single aggregated result.
@@ -574,7 +579,7 @@ Intermediate operations transform a stream into another stream:
 - **`anyMatch()` / `allMatch()` / `noneMatch()`** — check whether elements match a given condition.
 - **`findFirst()` / `findAny()`** — return the first or any element from a stream.
 
-`Stream.reduce()` performs a reduction on the elements of a stream using an associative accumulation function and returns an `Optional`. It's commonly used to aggregate or combine elements into a single result, such as computing the maximum, minimum, sum, or product.
+`Stream.reduce()` performs a reduction on the elements of a stream using an associative accumulation function and (in its no-identity form) returns an `Optional`; `reduce(identity, accumulator)` returns the value directly. It's commonly used to aggregate or combine elements into a single result, such as computing the maximum, minimum, sum, or product.
 
 ### Parallel Streams
 
@@ -634,11 +639,11 @@ Before Java 8, interfaces could only have abstract methods (no body); the implem
 - **`Optional.of(value)`** — wraps a non-null value; throws `NullPointerException` immediately if the value is null.
 - **`Optional.ofNullable(value)`** — wraps a value that may be null; returns an empty `Optional` if null.
 - **`Optional.empty()`** — returns an empty `Optional`.
-- **`isPresent()` / `isEmpty()`** — check if a value exists.
+- **`isPresent()` / `isEmpty()`** — check if a value exists (`isEmpty()` was added in Java 11).
 - **`get()`** — returns the value if present, else throws `NoSuchElementException`. Common interview trap: calling `get()` without checking presence defeats the purpose of `Optional`.
 - **`orElse(default)`** — returns the value if present, else returns the default.
 - **`orElseGet(Supplier)`** — like `orElse()`, but lazily computes the default only when needed (better for expensive defaults).
-- **`orElseThrow()`** — throws a custom exception if the value is absent.
+- **`orElseThrow(Supplier)`** — throws a custom exception if the value is absent (the no-argument `orElseThrow()` is Java 10+ and throws `NoSuchElementException`).
 - **`map()` / `filter()`** — allow chaining transformations on the wrapped value without manual null checks.
 
 > **Best practice:** use `Optional` as a return type for methods, not as a field type or method parameter.
@@ -770,9 +775,9 @@ Locks only a specific section of code instead of the entire method, providing be
 Locks at the class level instead of the object level, protecting static data/methods shared across all instances.
 
 **Volatile Keyword**
-Ensures all threads have a consistent view of a variable's value by preventing caching.
+Gives all threads a consistent view of a variable: a write to a `volatile` variable *happens-before* every later read of it, and the compiler/CPU may not reorder instructions around it (implemented with memory barriers, not by "disabling the cache").
 - Applies only to variables.
-- Guarantees visibility — any write is immediately visible to other threads.
+- Guarantees visibility and ordering — a write is visible to threads that subsequently read the variable.
 - Does **not** guarantee atomicity — operations like `count++` can still be inconsistent.
 
 ### Race Condition
@@ -824,9 +829,9 @@ Found in `java.util.concurrent.atomic` (e.g., `AtomicInteger`, `AtomicLong`). Th
 
 ### Daemon Threads
 
-A daemon thread is a low-priority background thread that supports user threads (e.g., garbage collection, monitoring). Daemon threads run in the background and terminate automatically once all user threads finish.
+A daemon thread is a background thread that does not keep the JVM alive (daemon status is unrelated to priority) and supports user threads (e.g., garbage collection, monitoring). Daemon threads run in the background and terminate automatically once all user threads finish.
 
-- Marked using `setDaemon(boolean)`.
+- Marked using `setDaemon(true)`, which must be called **before** `start()`.
 - Status checked using `isDaemon()`.
 
 ### Callable Interface
@@ -1451,7 +1456,7 @@ AOP is a programming paradigm that separates cross-cutting concerns (like loggin
     <artifactId>spring-boot-starter-aop</artifactId>
 </dependency>
 ```
-Then annotate the main class or a configuration class with `@EnableAspectJAutoProxy`.
+In Spring Boot the starter is enough (`AopAutoConfiguration` enables it). `@EnableAspectJAutoProxy` is only needed in plain Spring, or to force `proxyTargetClass`.
 
 **Spring AOP vs AspectJ:**
 
@@ -1472,8 +1477,9 @@ Then annotate the main class or a configuration class with `@EnableAspectJAutoPr
 - Slightly lower performance due to runtime proxies.
 
 **JDK Dynamic Proxy vs CGLIB Proxy:**
-- **JDK Dynamic Proxy** — used when the target implements an interface; creates a proxy implementing the same interface; faster to create.
-- **CGLIB Proxy** — used when the target doesn't implement an interface; creates a subclass of the target; slightly slower but more flexible.
+- **JDK Dynamic Proxy** — used when the target implements an interface; creates a proxy implementing the same interface.
+- **CGLIB Proxy** — creates a subclass of the target (so `final` classes/methods can't be advised).
+- Plain Spring picks a JDK proxy if interfaces exist, else CGLIB. **Spring Boot defaults to CGLIB** (`spring.aop.proxy-target-class=true`) even when interfaces exist.
 
 **`@Around` advice** wraps the target method completely, receives a `ProceedingJoinPoint` parameter, and can control whether to proceed with execution, modify arguments/return values, handle exceptions, and measure execution time.
 
@@ -1722,8 +1728,9 @@ Redis is an external, fast in-memory data store commonly used in production beca
    ```
 2. **Configure the connection** in `application.yml`/`application.properties`:
    ```properties
-   spring.redis.host=localhost
-   spring.redis.port=6379
+   spring.data.redis.host=localhost
+   spring.data.redis.port=6379
+   # Spring Boot 2.x used spring.redis.host / spring.redis.port
    ```
 3. **Enable caching:**
    ```java
@@ -1764,7 +1771,7 @@ EhCache is a Java-based in-memory caching provider, commonly used for fast cachi
 
 #### Cache Abstraction
 
-A common caching layer that lets developers use standard annotations (`@Cacheable`, `@CachePut`, `@CacheEvict`) without writing cache-specific code for Redis, EhCache, Caffeine, or others. Internally, Spring uses a `CacheManager` interface; depending on which cache dependency is on the classpath, Spring Boot automatically creates the appropriate manager (`RedisCacheManager`, `EhCacheCacheManager`, etc.) — letting you switch underlying cache technology via configuration alone, without touching business logic.
+A common caching layer that lets developers use standard annotations (`@Cacheable`, `@CachePut`, `@CacheEvict`) without writing cache-specific code for Redis, EhCache, Caffeine, or others. Internally, Spring uses a `CacheManager` interface; depending on which cache dependency is on the classpath, Spring Boot automatically creates the appropriate manager (`RedisCacheManager`, `CaffeineCacheManager`, `JCacheCacheManager` for Ehcache 3, etc.) — letting you switch underlying cache technology via configuration alone, without touching business logic.
 
 ---
 
@@ -1944,7 +1951,7 @@ Since microservices each typically own their own database, traditional ACID tran
 
 In a system made of many services, a single user request can pass through several services, making failures and performance issues hard to diagnose without a way to trace the whole path.
 
-- **Distributed tracing** — tools like Spring Cloud Sleuth, Zipkin, and Jaeger tag each request with a unique trace ID, allowing engineers to follow it across every service it touches.
+- **Distributed tracing** — tools like Micrometer Tracing (Spring Boot 3+; Spring Cloud Sleuth was for Boot 2.x and has been removed), Zipkin, and Jaeger tag each request with a unique trace ID, allowing engineers to follow it across every service it touches.
 - **Centralized logging** — tools like the ELK stack (Elasticsearch, Logstash, Kibana) aggregate logs from all services into one searchable place.
 - **Metrics/monitoring** — tools like Prometheus and Grafana track service health, latency, and error rates across the system.
 
@@ -2050,7 +2057,10 @@ public void saveEmployee(Employee emp) {
 Employee emp = new Employee();      // Transient
 entityManager.persist(emp);         // Managed
 entityManager.detach(emp);          // Detached
-entityManager.remove(emp);          // Removed
+// remove() needs a MANAGED entity: on a detached one it throws IllegalArgumentException,
+// so re-attach with merge() first:
+Employee managed = entityManager.merge(emp);   // Managed again
+entityManager.remove(managed);                 // Removed
 ```
 
 ### Primary Key Generation Strategies
@@ -2220,7 +2230,7 @@ public class Course {
 
 ### `mappedBy` — Owning vs Inverse Side
 
-`mappedBy` defines the owning side of a bidirectional relationship. The side **with** `mappedBy` is the **inverse** (non-owning) side; the owning side holds the foreign key (`@JoinColumn`).
+`mappedBy` marks the **inverse** (non-owning) side of a bidirectional relationship and names the field on the owning side. The side **with** `mappedBy` is the inverse side; the owning side holds the foreign key (`@JoinColumn`).
 
 ```java
 // Department is the inverse side
@@ -2258,6 +2268,8 @@ entityManager.persist(department); // newEmployee also persisted
 
 - **`LAZY`** — data is loaded on-demand when accessed; generally better performance.
 - **`EAGER`** — data is loaded immediately with the parent entity; can cause performance issues.
+
+**JPA defaults (interview favourite):** `@ManyToOne` and `@OneToOne` are **EAGER**; `@OneToMany` and `@ManyToMany` are **LAZY**. Prefer setting `@ManyToOne(fetch = LAZY)` explicitly.
 
 ```java
 @ManyToOne(fetch = FetchType.LAZY)
@@ -2682,9 +2694,9 @@ spring.jpa.properties.hibernate.batch_versioned_data=true
 |---|---|
 | `persist()` (JPA) | Only for new entities; throws if the entity already exists |
 | `merge()` (JPA) | For detached entities; returns a new managed copy |
-| `save()` (Spring Data JPA) | Can insert or update (delegates to `merge` internally if an ID is present) |
+| `save()` (Spring Data JPA) | Inserts or updates: calls `persist` if the entity `isNew()` (null id / null `@Version`), otherwise `merge` |
 | `saveAndFlush()` | Persists *and* immediately flushes to the database |
-| `update()` (Hibernate-specific) | Reattaches a detached entity; no return value |
+| `update()` (old Hibernate `Session` API) | Reattached a detached entity; removed in Hibernate 6, use `merge()` |
 
 ### StatelessSession (Hibernate)
 
@@ -2793,7 +2805,7 @@ List<Employee> findHighEarnersNative(Double minSalary);
 int giveDepartmentRaise(@Param("deptName") String deptName);
 ```
 
-> `@Modifying` marks a query as `UPDATE`/`DELETE`; it must always be paired with `@Transactional`.
+> `@Modifying` marks a query as `UPDATE`/`DELETE`; it needs an active transaction (usually supplied by a `@Transactional` service method). Add `clearAutomatically = true` so stale entities in the persistence context are not returned after the bulk update.
 
 ### LazyInitializationException
 
@@ -2809,8 +2821,8 @@ employee.getDepartment().getName(); // LazyInitializationException
 ```
 
 **Solutions:**
-1. Use `EAGER` fetching.
-2. Use `JOIN FETCH` in the query.
+1. Use `JOIN FETCH` in the query (best).
+2. Avoid switching to `EAGER` globally: it is an anti-pattern that loads unneeded data everywhere.
 3. Keep the transaction open around the code that accesses the association.
 4. Initialize lazy associations within the transaction.
 5. Use `EntityGraph`.
@@ -2933,10 +2945,13 @@ public class Employee {
 ```java
 public class CustomIdGenerator implements IdentifierGenerator {
     @Override
+    // Hibernate 6: return type is Object; Hibernate 5: Serializable
     public Serializable generate(SharedSessionContractImplementor session, Object object) {
         String prefix = "EMP";
-        Long maxId = (Long) session.createQuery("SELECT MAX(id) FROM Employee").uniqueResult();
-        return prefix + (maxId == null ? 1 : maxId + 1);
+        // Use a DB SEQUENCE for the number. MAX(id)+1 is NOT concurrency-safe, and MAX(id)
+        // on a String id column returns a String (casting it to Long throws ClassCastException).
+        Long next = ((Number) session.createNativeQuery("SELECT nextval('emp_seq')").uniqueResult()).longValue();
+        return prefix + next;
     }
 }
 

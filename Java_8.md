@@ -58,7 +58,7 @@ isEven.test(4);  // true
 // Combinators
 Predicate<Integer> isPositive = n -> n > 0;
 isEven.and(isPositive).test(4);   // true
-isEven.or(isPositive).test(-3);   // true
+isEven.or(isPositive).test(-3);   // false (-3 is odd and not positive); test(4) or test(3) would be true
 isEven.negate().test(4);          // false
 ```
 
@@ -273,18 +273,18 @@ list.stream()
     .collect(Collectors.toList());
 ```
 
-⚠️ **Important gotcha:** `peek()` **won't execute at all** if there's no terminal operation, and JVM/JIT may even **skip peek() calls entirely** if it determines the result is unused (optimization). Never use `peek()` for actual business logic/mutation — it's for debugging only.
+⚠️ **Important gotcha:** `peek()` **won't execute at all** if there's no terminal operation, and since Java 9 `count()` may **skip the pipeline (including `peek`)** when the size can be computed directly from the source. Never use `peek()` for actual business logic/mutation — it's for debugging only.
 
 ---
 
 ## 16. limit() / skip()
 
-**Intermediate**, short-circuiting operations.
+Both are **intermediate** operations. Only `limit()` is short-circuiting; `skip()` is not.
 
 ```java
 numbers.stream().limit(5)              // take first 5 elements only
 numbers.stream().skip(3)               // skip first 3 elements
-numbers.stream().skip(3).limit(5)      // classic pagination pattern: page 2, size 5
+numbers.stream().skip(3).limit(5)      // offset 3, size 5. Pagination: skip((page - 1) * size).limit(size), e.g. page 2, size 5 = skip(5).limit(5)
 ```
 
 `limit()` is **short-circuiting** — for an infinite stream, `Stream.iterate(1, n -> n+1).limit(5)` terminates correctly instead of running forever.
@@ -444,7 +444,7 @@ opt.orElseThrow(() -> new RuntimeException("not found"));
 opt.map(String::toUpperCase).orElse("N/A");   // chainable transformation
 ```
 
-**Interview line:** "Optional is meant as a **return type** for methods that might not have a result — not as a field type (adds serialization overhead) or a method parameter (forces callers to wrap things unnecessarily). It communicates absence explicitly in the type signature instead of relying on nullable references and hoping callers remember to null-check."
+**Interview line:** "Optional is meant as a **return type** for methods that might not have a result — not as a field type (`Optional` is not `Serializable`, so a class with an `Optional` field can't be serialized) or a method parameter (forces callers to wrap things unnecessarily). It communicates absence explicitly in the type signature instead of relying on nullable references and hoping callers remember to null-check."
 
 ---
 
@@ -535,7 +535,9 @@ stream.parallel()      // convert an existing stream to parallel
 Set<Integer> seen = new HashSet<>();
 List<Integer> duplicates = numbers.stream()
         .filter(n -> !seen.add(n))   // add() returns false if already present
+        .distinct()                  // otherwise 3,3,3 would give [3,3]
         .collect(Collectors.toList());
+// Note: this lambda is stateful, so don't use it with parallel() streams.
 ```
 
 **b) Find the second-highest number**

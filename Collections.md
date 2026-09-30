@@ -18,7 +18,7 @@
 
 ## 2. How does ArrayList grow?
 
-- Default initial capacity: **10** (only allocated on first `add()`, not at construction, since Java 7+).
+- Default initial capacity: **10** (only allocated on first `add()`, not at construction, since Java 8; earlier versions allocated the 10 slots eagerly).
 - When full, it grows via `grow()`:
   ```
   newCapacity = oldCapacity + (oldCapacity >> 1)   // 1.5x growth
@@ -96,7 +96,7 @@ When **two different keys** produce the **same bucket index** (either same hashC
   - Still uses a linked list for small chains.
   - If a bucket's chain length exceeds **`TREEIFY_THRESHOLD = 8`** AND the table capacity is at least **`MIN_TREEIFY_CAPACITY = 64`**, the chain is converted into a **Red-Black Tree**.
   - This changes worst-case lookup from **O(n) → O(log n)**.
-  - If the bucket shrinks below **`UNTREEIFY_THRESHOLD = 6`** (during resize), it's converted back to a linked list.
+  - If the bucket shrinks below **`UNTREEIFY_THRESHOLD = 6`** (during resize or after removals), it's converted back to a linked list. **If capacity is below 64 when a chain reaches 8, HashMap resizes the table instead of treeifying.**
 - Also, Java 8 changed the hash spreading function: `hash = (h = key.hashCode()) ^ (h >>> 16)` — XORs the high bits into the low bits to reduce collisions for poor hashCode implementations.
 
 **Interview line:** "Java 8 added treeification — if a single bucket gets more than 8 collisions and the table has at least 64 buckets, that bucket's linked list converts to a red-black tree, bringing worst-case lookup down from O(n) to O(log n). This protects against hash-flooding attacks and poor hashCode implementations."
@@ -125,7 +125,7 @@ It's the sweet spot from the time-vs-space trade-off:
 - Java's designers benchmarked it as the **best balance** between memory utilization and collision rate for typical (well-distributed) hashCodes.
 - Using Poisson distribution math, at load factor 0.75, the expected chain length per bucket is very low (~0.5), keeping lookups close to O(1).
 - Going higher (e.g., 0.9) saves memory but noticeably increases collision chains.
-- Going lower (e.g., 0.5) wastes ~33% more memory for negligible performance gain.
+- Going lower (e.g., 0.5) wastes roughly 50% more table space (1/0.5 vs 1/0.75) for only a small performance gain.
 
 **Interview line:** "0.75 is empirically the best trade-off Java engineers found — it keeps average bucket occupancy low enough for near-O(1) access while not wasting too much array space."
 
@@ -157,7 +157,7 @@ The **hashCode-equals contract** (from `Object` class docs):
 - HashMap/HashSet won't recognize them as duplicates → you get **duplicate entries** in a Set, or `map.get(key)` returns `null` even though an "equal" key exists.
 
 **If you override only `hashCode()`:**
-- Objects may land in the same bucket, but `equals()` (default = reference equality) will say they're different → wasted collision but no correctness issue directly, though behavior is still broken for logical equality use-cases.
+- Objects may land in the same bucket, but `equals()` (default = reference equality) will say they're different → **this is still a correctness bug**: logically equal objects land in the same bucket, but reference-based `equals()` treats them as different, so a `HashSet` stores duplicates and `map.get(new Key(..))` fails to find an equal key.
 
 **Interview line:** "Break the contract and hash-based collections silently misbehave — you can insert 'duplicate' objects into a HashSet, or fail to retrieve a value with a logically-equal key. Always override both, and keep them consistent with the same fields."
 
@@ -182,7 +182,7 @@ If you mutate a key **after** inserting it (changing a field that's part of `has
 | Thread safety | Not synchronized | Synchronized (every method) |
 | Performance | Faster (no locking overhead) | Slower (legacy, coarse locking) |
 | Null keys/values | 1 null key, multiple null values allowed | No nulls allowed (throws NPE) |
-| Iteration | Fail-fast iterator | Uses **Enumerator** (not fail-fast) |
+| Iteration | Fail-fast iterator | Legacy `Enumeration` (from `keys()`/`elements()`) is not fail-fast; its `entrySet()/keySet()` iterators are fail-fast |
 | Introduced | Java 1.2 (Collections Framework) | Java 1.0 (legacy) |
 | Recommended alternative | — | Use `ConcurrentHashMap` for thread safety |
 
@@ -200,7 +200,7 @@ If you mutate a key **after** inserting it (changing a field that's part of `has
 | Iterator | Fail-fast (throws ConcurrentModificationException) | **Weakly consistent** — doesn't throw CME, may or may not reflect concurrent updates |
 | Performance under concurrency | Needs external sync (`Collections.synchronizedMap`) → full lock, poor scalability | High concurrency — only locks the specific bucket being modified |
 
-**Interview line:** "ConcurrentHashMap achieves thread safety without locking the entire map. In Java 8, it moved from segment locking to finer-grained per-bucket locking using synchronized blocks on the first node, combined with CAS operations for lock-free reads — reads generally don't block at all."
+**Interview line:** "ConcurrentHashMap achieves thread safety without locking the entire map. In Java 8, it moved from segment locking to finer-grained per-bucket locking using synchronized blocks on the first node, with CAS used to insert into an empty bucket; reads use volatile access and generally don't block at all."
 
 ---
 
@@ -244,7 +244,7 @@ Same relationship as Q15, but for Sets:
 ```java
 // Comparable — natural order, defined once in the class
 class Employee implements Comparable<Employee> {
-    public int compareTo(Employee o) { return this.id - o.id; }
+    public int compareTo(Employee o) { return Integer.compare(this.id, o.id);   // never use subtraction: it can overflow }
 }
 
 // Comparator — external, flexible, composable (Java 8+)

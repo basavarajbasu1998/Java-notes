@@ -71,7 +71,7 @@ Security Filter Chain
           |
           ├── Allowed → Controller
           |
-          └── Denied → 403
+          └── Denied → 401 (not authenticated) / 403 (authenticated but not allowed)
 ```
 
 ---
@@ -263,11 +263,13 @@ public class CustomUserDetailsService
         implements UserDetailsService {
 
     @Override
-    public UserDetails loadUserByUsername(String username) {
+    public UserDetails loadUserByUsername(String username)
+            throws UsernameNotFoundException {
 
         User user = userRepository
                 .findByUsername(username)
-                .orElseThrow();
+                .orElseThrow(() -> new UsernameNotFoundException(
+                        "User not found: " + username));
 
         return new CustomUserDetails(user);
     }
@@ -524,6 +526,8 @@ These are different origins.
 # 19. Why do we use `@PreAuthorize`?
 
 It provides method-level authorization.
+
+> Requires `@EnableMethodSecurity` on a configuration class (Spring Security 6; it replaces the deprecated `@EnableGlobalMethodSecurity`). Without it, `@PreAuthorize` is silently ignored. Also note `hasRole('ROLE_ADMIN')` is wrong: `hasRole` adds the `ROLE_` prefix itself, so write `hasRole('ADMIN')`.
 
 ```java
 @PreAuthorize("hasRole('ADMIN')")
