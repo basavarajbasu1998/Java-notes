@@ -756,6 +756,8 @@ A Java thread transitions through several states from creation to termination:
 
 Synchronization controls the execution of multiple threads so that shared resources are accessed in an orderly manner, avoiding conflicts and ensuring correct results.
 
+synchronized makes sure only one thread at a time executes a block of code, using an object's intrinsic lock (monitor). A thread must acquire the lock before entering and releases it automatically when leaving, even on an exception. It also guarantees visibility: changes made inside are seen by the next thread that takes the same lock. For an instance method the lock is this, and for a static method it is the Class object.
+
 - Controls access to shared resources.
 - Avoids data inconsistency.
 - Ensures proper execution of processes.
