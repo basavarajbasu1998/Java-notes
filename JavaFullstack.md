@@ -799,6 +799,90 @@ A deadlock occurs when two or more threads are permanently blocked because each 
 2. **Release resources quickly** — don't hold a lock longer than necessary.
 3. **Don't wait forever (timeout)** — if a second resource isn't available in time, release the first and retry later instead of blocking permanently.
 
+
+
+
+ReentrantLock in Java – Theory
+1. What is ReentrantLock?
+ReentrantLock is a locking mechanism provided by Java's java.util.concurrent.locks package.
+
+It is used to achieve thread synchronization and prevent multiple threads from accessing shared resources simultaneously.
+
+It provides more flexibility and advanced locking features compared to the traditional synchronized keyword.
+2. Why do we use ReentrantLock?
+In multithreaded applications, multiple threads may try to access or modify the same shared resource.
+
+This can lead to:
+- Race conditions.
+- Data inconsistency.
+- Unexpected results.
+- Thread-safety issues.
+To avoid these problems, we use ReentrantLock to ensure that only one thread at a time accesses the critical section.
+3. How does ReentrantLock work?
+1. A thread calls lock() to acquire the lock.
+2. If the lock is available, the thread acquires it.
+3. If another thread already holds the lock, the requesting thread waits.
+4. Once the thread completes its operation, it calls unlock().
+5. Another waiting thread can then acquire the lock.
+4. Why is it called ReentrantLock?
+Reentrant means a thread can acquire the same lock multiple times without getting blocked by its own lock.
+
+For example:
+- Thread-1 acquires the lock.
+- Thread-1 calls another method that acquires the same lock.
+- The same thread can acquire it again.
+- It must release the lock the same number of times it acquired it.
+This is called reentrancy.
+5. Important methods of ReentrantLock
+Method	Purpose
+lock()	Acquires the lock. Waits if unavailable.
+unlock()	Releases the lock.
+tryLock()	Attempts to acquire the lock without waiting indefinitely.
+lockInterruptibly()	Allows a waiting thread to be interrupted.
+isLocked()	Checks whether the lock is currently held.
+getHoldCount()	Returns how many times the current thread acquired the lock.
+isHeldByCurrentThread()	Checks whether the current thread owns the lock.
+
+6. Fair Lock vs Unfair Lock
+Fair Lock:
+- Threads acquire the lock approximately in the order they requested it.
+- Reduces the possibility of thread starvation.
+- Can have lower performance.
+Unfair Lock:
+- Threads do not have to acquire the lock in waiting order.
+- A new thread may acquire the lock before an already waiting thread.
+- Generally offers better performance.
+By default, ReentrantLock uses an unfair locking policy.
+7. Advantages of ReentrantLock
+1. Provides more control over thread synchronization.
+2. Supports tryLock().
+3. Supports interruptible lock acquisition.
+4. Supports fair and unfair locking.
+5. Allows the same thread to acquire the lock multiple times.
+6. Useful for complex multithreading scenarios.
+8. Disadvantages
+1. We must manually release the lock.
+2. If unlock() is missed, other threads may wait indefinitely.
+3. More code compared to synchronized.
+4. Incorrect lock management can cause deadlocks.
+9. Real-world example
+Consider a banking application.
+
+Two users try to withdraw money from the same bank account simultaneously.
+
+Without locking, both threads might read the same balance and update it incorrectly.
+
+Using ReentrantLock, we ensure that one withdrawal operation completes before another thread accesses the shared balance.
+10. Synchronized vs ReentrantLock
+Feature	synchronized	ReentrantLock
+Type	Keyword	Class
+Lock management	Automatic	Manual
+tryLock()	Not available	Available
+Fairness	No fairness option	Supports fairness
+Interruptible acquisition	No	Yes
+Reentrant	Yes	Yes
+Multiple conditions	No direct support	Supports Condition
+
 ### Cooperation (Inter-thread Communication)
 
 Allows multiple threads to coordinate execution by communicating instead of competing for a resource, using `wait()`, `notify()`, and `notifyAll()` from the `Object` class.
